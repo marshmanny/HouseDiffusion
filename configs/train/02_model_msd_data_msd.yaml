@@ -1,0 +1,156 @@
+exp:
+  # wandb exp name
+  name: model=msd|data=msd|h_dim=512
+  # wandb project
+  project: GenPlan
+  # wandb online / offline mode
+  mode: online
+  # wandb notes
+  notes: ""
+
+training:
+  trainer: base_wi_all_metrics
+  num_epochs: 200
+  # вроде сами инициализируются
+  num_iters: 2000
+  num_val_iters: null
+  num_test_iters: null
+  batch_size: 512
+  val_batch_size: 32
+  test_batch_size: 16
+  upd_lr_iter: 100000
+  ema:
+    rate: "0.9999"
+    every_iter: 1
+  device: cuda
+  # mode = offline & num_epochs = 2 & num_iters = 5 & num_val_iters = 5 & save_code = False
+  debug: false
+
+checkpoint:
+  save_every: 1
+  metric: val_model/total
+  max_amount: 3
+
+data:
+  name: rplan-msd
+  loader: infinite
+  num_workers: 4
+  target_set: 8
+  non_manhattan: false
+  use_structural_elements: true
+  analog_bit: false
+  save_path: data/processed_rplan_structural_full
+  data_zip_path: data/rplan_json.zip
+  img_size: 256
+
+dataset:
+  rplan-msd:
+    train:
+      set_name: train
+      target_set: ${data.target_set}
+      analog_bit: ${data.analog_bit}
+      non_manhattan: ${data.non_manhattan}
+      use_structural_elements: ${data.use_structural_elements}
+      save_path: ${data.save_path}
+      data_zip_path: ${data.data_zip_path}
+    val:
+      set_name: eval
+      target_set: ${data.target_set}
+      analog_bit: ${data.analog_bit}
+      non_manhattan: ${data.non_manhattan}
+      use_structural_elements: ${data.use_structural_elements}
+      save_path: ${data.save_path}
+      data_zip_path: ${data.data_zip_path}
+    test:
+      set_name: eval
+      max_len: 30
+      target_set: ${data.target_set}
+      analog_bit: ${data.analog_bit}
+      non_manhattan: ${data.non_manhattan}
+      use_structural_elements: ${data.use_structural_elements}
+      save_path: ${data.save_path}
+      data_zip_path: ${data.data_zip_path}
+
+loader:
+  infinite:
+    train:
+      batch_size: ${training.batch_size}
+      num_workers: ${data.num_workers}
+      shuffle: True
+      drop_last: true
+      device: ${training.device}
+    val:
+      batch_size: ${training.val_batch_size}
+      num_workers: ${data.num_workers}
+      shuffle: False
+      drop_last: false
+      device: ${training.device}
+    test:
+      batch_size: ${training.test_batch_size}
+      num_workers: ${data.num_workers}
+      shuffle: False
+      drop_last: false
+      device: ${training.device}
+
+log:
+  wandb_chp: false
+  images_epoch: 1
+  save_code: true
+
+model:
+  model: Transformer
+  params:
+    in_channels: 18
+    condition_channels: 89
+    model_channels: 512
+    out_channels: 2
+    dataset: ''
+    use_checkpoint: false
+    use_unet: false
+    analog_bit: ${data.analog_bit}
+    struct_in_channels: 18
+    use_wall_self_attention: true
+    img_size: ${data.img_size}
+  
+  opt: AdamW
+  opt_params:
+    lr: 1.0e-4
+    weight_decay: 0.0
+  
+  clip_grad_norm: 5
+  
+  losses:
+    base:
+      mse_bin:
+        func: l2_pad_w_loss
+        input_map: {x: bin_target, y: model_output_bin, padding_mask: tmp_mask, weight1: t_weights, weight2: batch_weights}
+        coef: 1
+      mse_dec:
+        func: l2_pad_w_loss
+        input_map: {x: target, y: model_output_dec, padding_mask: tmp_mask, weight1: ones_like_target, weight2: batch_weights}
+        coef: 1
+  
+  metrics:
+    train: {}
+    val: {}
+    test:
+      rplan:
+        func: rplan_all_256
+        input_map: {sample_and_gt: sample_and_gt, cat_imgs: true}
+
+diffusion:
+  diffusion: GaussianDiffusion
+  params:
+    noise_schedule: cosine
+    steps: 1000
+    predict_xstart: false
+    sigma_small: false
+    learn_sigma: false
+    rescale_timesteps: false
+    img_size: ${data.img_size}
+
+helpers:
+  schedule_sampler: uniform
+
+personal:
+  wandb_key: cfe317e829499121f6ff5d922c5b34768c57d311
